@@ -1,62 +1,47 @@
 const router = require("express").Router();
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const { jwtSecret } = require("../secrets");
 const {
-  checkUniqueUsername,
-  validateUserBody,
-  checkUsernameExists,
-} = require("../middleware/users-middleware");
-const Users = require("../users/users-model");
+  checkUsernameUnique,
+  checkPayload,
+  checkUserInDb,
+  makeToken,
+} = require("../middleware/auth-middleware");
+const bcrypt = require("bcryptjs");
 
-router.post(
-  "/register",
-  validateUserBody,
-  checkUniqueUsername,
-  (req, res, next) => {
-    let user = req.body;
+const User = require("./auth-model");
 
-    const rounds = process.env.BCRYPT_ROUNDS || 8;
-    const hash = bcrypt.hashSync(user.password, rounds);
+router.post("/register", checkPayload, checkUsernameUnique, (req, res) => {
+  const { password } = req.body;
+  const hash = bcrypt.hashSync(password, 8);
 
-    user.password = hash;
+  req.body.password = hash;
 
-    Users.add(user)
-      .then((user) => {
-        res.status(201).json(user);
-      })
-      .catch(next);
-  }
-);
+  User.add(req.body)
+    .then((registered) => {
+      res.status(201).json(registered);
+    })
+    .catch((err) => {
+      res.status(500).json({ message: `Server error: ${err}` });
+    });
+});
 
-router.post(
-  "/login",
-  validateUserBody,
-  checkUsernameExists,
-  (req, res, next) => {
-    let { password, user } = req.body;
+router.post("/login", checkPayload, checkUserInDb, (req, res) => {
+  const { username, password } = req.body;
 
-    if (user && bcrypt.compareSync(password, user.password)) {
-      const token = makeToken(user);
-      res.status(200).json({
-        message: `welcome, ${user.username}`,
-        token,
-      });
-    } else {
-      next({ message: "invalid credentials", status: 401 });
-    }
-  }
-);
+  User.findBy({ username: username })
+    .first()
+    .then((user) => {
+      if (user && bcrypt.compareSync(password, user.password)) {
+        const token = makeToken(user);
 
-function makeToken(user) {
-  const payload = {
-    subject: user.id,
-    username: user.username,
-  };
-  const options = {
-    expiresIn: "1d",
-  };
-  return jwt.sign(payload, jwtSecret, options);
-}
+        res.status(200).json({
+          message: `welcome, ${user.username}`,
+          token: token,
+        });
+      }
+    })
+    .catch((err) => {
+      res.status(500).json({ message: `Server error: ${err}` });
+    });
+});
 
 module.exports = router;

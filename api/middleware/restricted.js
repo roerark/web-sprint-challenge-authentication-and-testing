@@ -1,15 +1,15 @@
 const jwt = require("jsonwebtoken");
-const { jwtSecret } = require("../secrets");
+const { JWT_SECRET } = require("../secrets");
 
 module.exports = (req, res, next) => {
   const token = req.headers.authorization;
 
   if (!token) {
-    next({ message: "token required", status: 401 });
+    res.status(401).json({ message: "token required" });
   } else {
-    jwt.verify(token, jwtSecret, (err, decoded) => {
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
-        next({ message: "token invalid", status: 401 });
+        res.status(401).json({ message: "invalid token" });
       } else {
         req.decodedToken = decoded;
         next();
